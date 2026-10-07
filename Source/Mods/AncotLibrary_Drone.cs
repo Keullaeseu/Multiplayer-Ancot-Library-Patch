@@ -75,7 +75,7 @@ public partial class AncotLibrary
             if (worker?.jobs == null || clicked == null)
                 return true;
 
-            SyncedDisassembleMech(worker, clicked);
+            SyncedDisassembleMech(clicked, worker);
             return false;
         }
         catch (Exception exception)

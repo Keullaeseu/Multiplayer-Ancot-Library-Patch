@@ -84,7 +84,7 @@ public partial class AncotLibrary
             "AncotLibrary.HediffComp_AlternateWeapon",
             "CompGetGizmos",
             [],
-            ["TryDrop", "EquipeFromStorage"]);
+            ["TryDropEquipment", "EquipeFromStorage"]);
 
         // Apparel reloadable targetCharges slider (DraggableBar in GizmoOnGUI writes targetCharges directly)
         apparelTargetChargesField = SafeSyncField("AncotLibrary.CompApparelReloadable_Custom", "targetCharges");
@@ -130,7 +130,7 @@ public partial class AncotLibrary
             }
         }
 
-        MP.RegisterSyncMethod(typeof(AncotLibrary), nameof(SyncedTurretSetTarget));
+        // SyncedTurretSetTarget is registered once above (line 36); do not register again.
     }
 
     private static bool PreTurretForceTarget(object __instance, object[] __args)

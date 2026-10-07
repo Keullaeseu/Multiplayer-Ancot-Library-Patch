@@ -1,3 +1,4 @@
+using System.Collections;
 using HarmonyLib;
 using Multiplayer.API;
 using UnityEngine;
@@ -44,7 +45,7 @@ public partial class AncotLibrary
                     var seedGetter = AccessTools.PropertyGetter(genStepType, "SeedPart");
                     if (seedGetter != null)
                         SafePatch(seedGetter,
-                            postfix: new HarmonyMethod(typeof(AncotLibrary), nameof(PostGenStepSeedPart)));
+                            new HarmonyMethod(typeof(AncotLibrary), nameof(PreGenStepSeedPart)));
                 }
                 catch (Exception exception)
                 {
@@ -61,8 +62,8 @@ public partial class AncotLibrary
             SafePatch(knockBack, new HarmonyMethod(typeof(AncotLibrary), nameof(PreRepulsiveKnockBack)));
         }
 
-        // IncidentWorker trader caravan is tick-synced, but ensure parms resolve is deterministic
-        SafeSyncMethod("AncotLibrary.IncidentWorker_TraderCaravanArrival_Custom", "TryResolveParmsGeneral");
+        // IncidentWorker trader caravan resolution runs inside the synced storyteller tick and takes
+        // IncidentParms (no sync worker) - intentionally not synced as a method; tick sync covers it.
 
         // Royal permit targeting is player input -> ensure OrderForceTarget is synced (it opens targeting, then CallResources)
         SafeSyncMethod("AncotLibrary.RoyalTitlePermitWorker_DropPawn_join", "OrderForceTarget");
@@ -83,12 +84,12 @@ public partial class AncotLibrary
         return true;
     }
 
-    private static void PostGenStepSeedPart(ref int __result, object __instance)
+    private static bool PreGenStepSeedPart(ref int __result, object __instance)
     {
         try
         {
             // Original: 341125487 + Rand.Range(0, 99999) - consumes global Rand in getter, breaks determinism.
-            // Replace with stable per-type constant. Map gen already provides seed via GenStepParams.
+            // Prefix + skip avoids consuming Rand at all. Stable per-type constant; map gen seeds via GenStepParams.
             var typeName = __instance.GetType().FullName;
             __result = typeName switch
             {
@@ -97,10 +98,12 @@ public partial class AncotLibrary
                 "AncotLibrary.GenStep_GenPawnAroundMapCenter_Defend" => 341125489,
                 _ => 341125487
             };
+            return false;
         }
         catch (Exception exception)
         {
-            Log.Warning($"{LogPrefix} PostGenStepSeedPart failed: {exception.Message}");
+            Log.Warning($"{LogPrefix} PreGenStepSeedPart failed, running original: {exception.Message}");
+            return true;
         }
     }
 
@@ -115,7 +118,7 @@ public partial class AncotLibrary
             // Deterministic fallback: use synced Rand.Range for angle instead of UnityEngine.Random.onUnitSphere.
             var angle = Rand.Range(0f, 360f);
             var fallback = new Vector3(Mathf.Cos(angle * Mathf.Deg2Rad), 0f, Mathf.Sin(angle * Mathf.Deg2Rad));
-            DoDeterministicKnockBack(original, thing, knockBackDistance, fallback);
+            DoDeterministicKnockBack(__instance, original, thing, knockBackDistance, fallback);
             return false;
         }
         catch (Exception exception)
@@ -125,8 +128,8 @@ public partial class AncotLibrary
         }
     }
 
-    private static void DoDeterministicKnockBack(IntVec3 original, Thing thing, float knockBackDistance,
-        Vector3 direction)
+    private static void DoDeterministicKnockBack(object projectile, IntVec3 original, Thing thing,
+        float knockBackDistance, Vector3 direction)
     {
         try
         {
@@ -148,6 +151,7 @@ public partial class AncotLibrary
                 thing.Position = best;
                 if (thing is Pawn pawn)
                 {
+                    RemoveRepulsiveHediffs(projectile, pawn);
                     pawn.pather?.StopDead();
                     pawn.jobs?.StopAll();
                 }
@@ -156,6 +160,28 @@ public partial class AncotLibrary
         catch (Exception exception)
         {
             Log.Warning($"{LogPrefix} DoDeterministicKnockBack failed: {exception.Message}");
+        }
+    }
+
+    private static void RemoveRepulsiveHediffs(object projectile, Pawn pawn)
+    {
+        try
+        {
+            if (projectile == null || pawn?.health?.hediffSet == null) return;
+            var props = AccessTools.Property(projectile.GetType(), "Props")?.GetValue(projectile, null);
+            var removeList = AccessTools.Field(props?.GetType(), "removeHediffsAffected")?.GetValue(props)
+                as IEnumerable;
+            if (removeList == null) return;
+            foreach (var entry in removeList)
+                if (entry is HediffDef hediffDef)
+                {
+                    var existing = pawn.health.hediffSet.GetFirstHediffOfDef(hediffDef);
+                    if (existing != null) pawn.health.RemoveHediff(existing);
+                }
+        }
+        catch (Exception exception)
+        {
+            Log.Warning($"{LogPrefix} RemoveRepulsiveHediffs failed: {exception.Message}");
         }
     }
 }
