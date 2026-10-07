@@ -3,7 +3,7 @@
 	<name>Multiplayer Ancot Library Patch</name>
 	<author>Keullaeseu</author>
 	<packageId>keullaeseu.mp.Ancot.AncotLibrary</packageId>
-	<modVersion>1.0.0.0</modVersion>
+	<modVersion>1.0.0.1</modVersion>
 	<url>https://github.com/Keullaeseu/Multiplayer-Ancot-Library-Patch</url>
 	<description>Provides multiplayer support for the Ancot Library mod by Ancot.</description>
 
